@@ -1,5 +1,5 @@
 # Computer Vision Project
-This repository aims to implement techniques and reproduce result in paper 
+This repository aims to implement techniques and reproduce result in 
 [Generative Adversarial Networks](https://arxiv.org/abs/1406.2661)
 
 ## Components
