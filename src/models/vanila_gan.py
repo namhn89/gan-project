@@ -1,7 +1,5 @@
-import argparse
-import os
 import numpy as np
-import math
+import torch
 
 from torch import nn
 
@@ -24,13 +22,13 @@ class Generator(nn.Module):
             *block(128, 256),
             *block(256, 512),
             *block(512, 1024),
-            nn.Linear(1024, int(np.prod(self.img_shape))),
+            nn.Linear(1024, int(np.prod(self.image_shape))),
             nn.Tanh()
         )
 
     def forward(self, z):
         img = self.model(z)
-        img = img.view(img.size(0), *self.img_shape)
+        img = img.view(img.size(0), *self.image_shape)
         return img
 
 
@@ -40,7 +38,7 @@ class Discriminator(nn.Module):
         self.image_shape = image_shape
 
         self.model = nn.Sequential(
-            nn.Linear(int(np.prod(self.img_shape)), 512),
+            nn.Linear(int(np.prod(self.image_shape)), 512),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2, inplace=True),
@@ -56,4 +54,13 @@ class Discriminator(nn.Module):
 
 
 def test():
-    pass
+    z = torch.randn(32, 100)
+    G = Generator(latent_dim=100, image_shape=(28, 28, 1))
+    # img = torch.randn(32, 28, 28, 1)
+    D = Discriminator(image_shape=(28, 28, 1))
+    print(G(z).shape)
+    print(D(G(z)).shape)
+
+
+if __name__ == '__main__':
+    test()
