@@ -3,12 +3,6 @@ import os
 import numpy as np
 import math
 
-import torchvision.transforms as transforms
-from torchvision.utils import save_image
-
-from torch.utils.data import DataLoader
-from torchvision import datasets
-from torch.autograd import Variable
 from torch import nn
 
 
@@ -59,6 +53,7 @@ class Discriminator(nn.Module):
         validity = self.model(img_flat)
 
         return validity
+
 
 def test():
     pass
