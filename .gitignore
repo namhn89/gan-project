@@ -1,4 +1,17 @@
 datasets/
+
+# IDE file
 .vscode/
 .idea/
+
 __pycache__/
+# Distribution / packaging
+.Python
+# Jupyter Notebook
+.ipynb_checkpoints
+
+*.tgz
+*.zip
+
+#
+images/
