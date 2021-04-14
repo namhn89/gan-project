@@ -47,7 +47,7 @@ def matplotlib_imshow(img, one_channel=False):
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
 
 
-def show_tensor_images(image_tensor, writer, step, num_images=25, size=(1, 28, 28)):
+def show_tensor_images(image_tensor, writer, type_image, step, num_images=25, size=(1, 28, 28)):
     """
     Function for visualizing images: Given a tensor of images, number of images, and
     size per image, plots and prints the images in an uniform grid.
@@ -57,8 +57,9 @@ def show_tensor_images(image_tensor, writer, step, num_images=25, size=(1, 28, 2
     image_grid = make_grid(image_unflat[:num_images], nrow=5)
     # show images
     # matplotlib_imshow(image_grid, one_channel=True)
+
     # add tensorboard
-    writer.add_image('Generated Images', image_grid, global_step=step)
+    writer.add_image(type_image, image_grid, global_step=step)
 
 
 def parse_args():
@@ -240,9 +241,12 @@ def main():
                 with torch.no_grad():
                     # save_image(gen_imgs.data[:25], args.path_images + "/%d.png" % steps, nrow=5, normalize=True)
                     fake = generator(z)
+
                     save_image(real_imgs.data[:25], saved_path.joinpath("_real_%d.png" % steps), nrow=5, normalize=True)
                     save_image(fake.data[:25], saved_path.joinpath("_fake_%d.png" % steps), nrow=5, normalize=True)
-                    show_tensor_images(fake, summary_writer, steps)
+
+                    show_tensor_images(fake, summary_writer, "Fake Image", steps)
+                    show_tensor_images(real_imgs, summary_writer, "Real Image", steps)
 
                 # do checkpointing
                 torch.save(generator.state_dict(),
