@@ -6,6 +6,7 @@ import datetime
 import logging
 from pathlib import Path
 import shutil
+import random
 from distutils.dir_util import copy_tree
 
 import matplotlib.pyplot as plt
@@ -31,6 +32,13 @@ from utils.general import weights_init
 
 cuda = True if torch.cuda.is_available() else False
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+# Set random seed for reproducibility
+manualSeed = 999
+#manualSeed = random.randint(1, 10000) # use if you want new results
+print("Random Seed: ", manualSeed)
+random.seed(manualSeed)
+torch.manual_seed(manualSeed)
 
 
 def get_noise(n_samples, z_dim, device='cpu'):
@@ -200,17 +208,19 @@ def main():
     G_losses = []
     D_losses = []
 
-    fixed_noise = torch.randn(args.batch_size, args.latent_dim, 1, 1, device=device)
+    fixed_noise = torch.randn(args.batch_size, args.latent_dim, device=device)
 
     for epoch in range(args.n_epochs):
-        for i, (imgs, _) in enumerate(dataloader):
+        for i, (images, _) in enumerate(dataloader):
 
             # Adversarial ground truths
-            valid = Variable(Tensor(imgs.shape[0], 1).fill_(1.0), requires_grad=False)
-            fake = Variable(Tensor(imgs.shape[0], 1).fill_(0.0), requires_grad=False)
+            real_label = 1.
+            fake_label = 0.
+
+            label = torch.full((images.size(0), ), real_label, dtype=torch.float, device=device)
 
             # Configure input
-            real_imgs = Variable(imgs.type(Tensor))
+            real_images = images.to(device)
 
             ############################
             # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
@@ -219,25 +229,24 @@ def main():
             ## Train with all-real batch
 
             discriminator.zero_grad()
-            output = discriminator(real_imgs)
+            output = discriminator(real_images).view(-1)
 
-            errD_real = adversarial_loss(output, valid)
+            errD_real = adversarial_loss(output, label)
             errD_real.backward()
             D_x = output.mean().item()
 
             ## Train with all-fake batch
             # Generate batch of latent vectors
-            noise = torch.randn(args.batch_size, args.latent_dim, 1, 1, device=device)
+            noise = torch.randn(images.size(0), args.latent_dim, device=device)
 
-            gen_imgs = generator(noise)
+            gen_images = generator(noise)
+            label.fill_(fake_label)
             # Classify all fake batch with D
-            output = discriminator(gen_imgs.detach())
+            output = discriminator(gen_images.detach()).view(-1)
             # Calculate D's loss on the all-fake batch
-            errD_fake = adversarial_loss(gen_imgs, fake)
+            errD_fake = adversarial_loss(output, label)
             errD_fake.backward()
-
             D_G_z1 = output.mean().item()
-
             # Add the gradients from the all-real and all-fake batches
             errD = (errD_real + errD_fake) / 2
             # Update D
@@ -248,9 +257,10 @@ def main():
             ###########################
             generator.zero_grad()
             # Since we just updated D, perform another forward pass of all-fake batch through D
-            output = discriminator(gen_imgs)
+            label.fill_(real_label)
+            output = discriminator(gen_images).view(-1)
             # Calculate G's loss based on this output
-            errG = adversarial_loss(output, valid)
+            errG = adversarial_loss(output, label)
             # Calculate gradients for G
             errG.backward()
             D_G_z2 = output.mean().item()
@@ -262,8 +272,8 @@ def main():
                 % (epoch, args.n_epochs, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
             )
 
-            G_losses.append(errG.item())
             D_losses.append(errD.item())
+            G_losses.append(errG.item())
 
             steps = epoch * len(dataloader) + i
             summary_writer.add_scalar('Discriminator Loss', errD.item(), steps)
@@ -273,17 +283,27 @@ def main():
                 with torch.no_grad():
                     fake = generator(fixed_noise)
 
-                    save_image(real_imgs.data[:25], saved_path.joinpath("_real_%d.png" % steps), nrow=5, normalize=True)
-                    save_image(fake.data[:25], saved_path.joinpath("_fake_%d.png" % steps), nrow=5, normalize=True)
+                    save_image(real_images.data[:25], saved_path.joinpath("real_%d.png" % steps), nrow=5, normalize=True)
+                    save_image(fake.data[:25], saved_path.joinpath("fake_%d.png" % steps), nrow=5, normalize=True)
 
-                    show_tensor_images(fake, summary_writer, "Fake Image", steps)
-                    show_tensor_images(real_imgs, summary_writer, "Real Image", steps)
+                    show_tensor_images(real_images.data[:25], summary_writer, "Real Image", steps)
+                    show_tensor_images(fake.data[:25], summary_writer, "Fake Image", steps)
 
                 # do checkpointing
                 torch.save(generator.state_dict(),
                            checkpoints_dir.joinpath(f"{args.log_dir}_G_iter_{steps}.pth"))
                 torch.save(discriminator.state_dict(),
                            checkpoints_dir.joinpath(f"{args.log_dir}_D_iter_{steps}.pth"))
+
+    plt.figure(figsize=(10, 5))
+    plt.title("Generator and Discriminator Loss During Training")
+    plt.plot(G_losses, label="G")
+    plt.plot(D_losses, label="D")
+    plt.xlabel("iterations")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.show()
+    plt.savefig(experiment_dir.joinpath('out.png'))
 
 
 if __name__ == '__main__':

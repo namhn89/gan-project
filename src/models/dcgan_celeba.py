@@ -58,6 +58,7 @@ class NetD_CelebA(nn.Module):
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels=self.image_shape[0], out_channels=self.feature_size,
                       kernel_size=4, stride=2, padding=1, bias=False),
+            # nn.BatchNorm2d(self.feature_size),
             nn.LeakyReLU(0.2, inplace=True),
         )
         self.conv2 = nn.Sequential(
