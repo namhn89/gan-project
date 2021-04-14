@@ -24,10 +24,13 @@ from tqdm import tqdm
 
 import preprocess_data
 
-from models.vanilla_gan import Discriminator, Generator
+from models.dcgan_mnist import NetD_MNIST, NetG_MNIST
+from models.dcgan_cifar10 import NetD_CIFAR10, NetG_CIFAR10
+from models.dcgan_celeba import NetD_CelebA, NetG_CelebA
 from utils.general import weights_init
 
 cuda = True if torch.cuda.is_available() else False
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
 def get_noise(n_samples, z_dim, device='cpu'):
@@ -75,7 +78,7 @@ def parse_args():
     parser.add_argument("--dataset", type=str, default="mnist", choices=["mnist", "celeba", "cifar10"])
     parser.add_argument("--display_step", type=int, default=10000, help="interval between image samples")
     parser.add_argument("--gpu", type=str, default='0', help='Specify')
-    parser.add_argument('--log_dir', type=str, default="vanilla_gan",
+    parser.add_argument('--log_dir', type=str, default="dcgan",
                         help='experiment root')
     return parser.parse_args()
 
@@ -153,9 +156,26 @@ def main():
     adversarial_loss = torch.nn.BCELoss()
 
     # Initialize generator and discriminator
-    generator = Generator(latent_dim=args.latent_dim,
-                          image_shape=(channels, img_size, img_size))
-    discriminator = Discriminator(image_shape=(channels, img_size, img_size))
+    global generator, discriminator
+
+    if args.dataset == 'mnist':
+        generator = NetG_MNIST(latent_dim=args.latent_dim,
+                               image_shape=(channels, img_size, img_size),
+                               feature_size=128)
+        discriminator = NetD_MNIST(image_shape=(channels, img_size, img_size),
+                                   feature_size=128)
+    elif args.dataset == 'cifar10':
+        generator = NetG_CIFAR10(latent_dim=args.latent_dim,
+                                 image_shape=(channels, img_size, img_size),
+                                 feature_size=128)
+        discriminator = NetD_CIFAR10(image_shape=(channels, img_size, img_size),
+                                     feature_size=128)
+    elif args.dataset == 'celeba':
+        generator = NetG_CelebA(latent_dim=args.latent_dim,
+                                image_shape=(channels, img_size, img_size),
+                                feature_size=128)
+        discriminator = NetD_CelebA(image_shape=(channels, img_size, img_size),
+                                    feature_size=128)
 
     # Optimizers
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
@@ -180,6 +200,8 @@ def main():
     G_losses = []
     D_losses = []
 
+    fixed_noise = torch.randn(args.batch_size, args.latent_dim, 1, 1, device=device)
+
     for epoch in range(args.n_epochs):
         for i, (imgs, _) in enumerate(dataloader):
 
@@ -190,60 +212,66 @@ def main():
             # Configure input
             real_imgs = Variable(imgs.type(Tensor))
 
-            # -----------------
-            #  Train Generator
-            # -----------------
+            ############################
+            # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+            ###########################
 
-            ##############################################
-            # (2) Update G network: min E(z)[log(1 - D(z))]
-            ##############################################
-            optimizer_G.zero_grad()
+            ## Train with all-real batch
 
-            # Sample noise as generator input
-            z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], args.latent_dim))))
+            discriminator.zero_grad()
+            output = discriminator(real_imgs)
 
-            # Generate a batch of images
-            gen_imgs = generator(z)
+            errD_real = adversarial_loss(output, valid)
+            errD_real.backward()
+            D_x = output.mean().item()
 
-            # Loss measures generator's ability to fool the discriminator
-            g_loss = adversarial_loss(discriminator(gen_imgs), valid)
+            ## Train with all-fake batch
+            # Generate batch of latent vectors
+            noise = torch.randn(args.batch_size, args.latent_dim, 1, 1, device=device)
 
-            g_loss.backward()
-            optimizer_G.step()
+            gen_imgs = generator(noise)
+            # Classify all fake batch with D
+            output = discriminator(gen_imgs.detach())
+            # Calculate D's loss on the all-fake batch
+            errD_fake = adversarial_loss(gen_imgs, fake)
+            errD_fake.backward()
 
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
+            D_G_z1 = output.mean().item()
 
-            ##############################################
-            # (1) Update D network: max E(x)[log(D(x))] + E(z)[log(1 - D(z))]
-            ##############################################
-            optimizer_D.zero_grad()
-
-            # Measure discriminator's ability to classify real from generated samples
-            real_loss = adversarial_loss(discriminator(real_imgs), valid)
-            fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
-            d_loss = (real_loss + fake_loss) / 2
-
-            d_loss.backward()
+            # Add the gradients from the all-real and all-fake batches
+            errD = (errD_real + errD_fake) / 2
+            # Update D
             optimizer_D.step()
 
+            ############################
+            # (2) Update G network: maximize log(D(G(z)))
+            ###########################
+            generator.zero_grad()
+            # Since we just updated D, perform another forward pass of all-fake batch through D
+            output = discriminator(gen_imgs)
+            # Calculate G's loss based on this output
+            errG = adversarial_loss(output, valid)
+            # Calculate gradients for G
+            errG.backward()
+            D_G_z2 = output.mean().item()
+            # Update G
+            optimizer_G.step()
+
             log_string(
-                "[Epoch %d/%d] [Batch %d/%d] [Discriminator loss: %f] [Generator loss: %f]"
-                % (epoch, args.n_epochs, i, len(dataloader), d_loss.item(), g_loss.item())
+                "[Epoch %d/%d] [Batch %d/%d] [Discriminator Loss: %f] [Generator Loss: %f] [D(x): %f] [D(G(z)): %f / %f]"
+                % (epoch, args.n_epochs, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
             )
 
-            G_losses.append(g_loss.item())
-            D_losses.append(d_loss.item())
+            G_losses.append(errG.item())
+            D_losses.append(errD.item())
 
             steps = epoch * len(dataloader) + i
-            summary_writer.add_scalar('Discriminator Loss', d_loss.item(), steps)
-            summary_writer.add_scalar('Generator Loss', g_loss.item(), steps)
+            summary_writer.add_scalar('Discriminator Loss', errD.item(), steps)
+            summary_writer.add_scalar('Generator Loss', errG.item(), steps)
 
             if steps % args.display_step == 0:
                 with torch.no_grad():
-                    # save_image(gen_imgs.data[:25], args.path_images + "/%d.png" % steps, nrow=5, normalize=True)
-                    fake = generator(z)
+                    fake = generator(fixed_noise)
 
                     save_image(real_imgs.data[:25], saved_path.joinpath("_real_%d.png" % steps), nrow=5, normalize=True)
                     save_image(fake.data[:25], saved_path.joinpath("_fake_%d.png" % steps), nrow=5, normalize=True)
