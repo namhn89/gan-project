@@ -55,9 +55,9 @@ class Discriminator(nn.Module):
 
 def test():
     z = torch.randn(32, 100)
-    G = Generator(latent_dim=100, image_shape=(28, 28, 1))
+    G = Generator(latent_dim=100, image_shape=(1, 28, 28))
     # img = torch.randn(32, 28, 28, 1)
-    D = Discriminator(image_shape=(28, 28, 1))
+    D = Discriminator(image_shape=(1, 28, 28))
     print(G(z).shape)
     print(D(G(z)).shape)
 

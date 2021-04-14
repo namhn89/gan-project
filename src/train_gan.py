@@ -72,8 +72,9 @@ def main():
     adversarial_loss = torch.nn.BCELoss()
 
     # Initialize generator and discriminator
-    generator = Generator(latent_dim=args.latent_dim, image_shape=(args.img_size, args.img_size, args.channels))
-    discriminator = Discriminator(image_shape=(args.img_size, args.img_size, args.channels))
+    generator = Generator(latent_dim=args.latent_dim,
+                          image_shape=(args.channels, args.img_size, args.img_size))
+    discriminator = Discriminator(image_shape=(args.channels, args.img_size, args.img_size))
 
     # Optimizers
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
@@ -142,8 +143,8 @@ def main():
             )
 
             batches_done = epoch * len(dataloader) + i
-            # if batches_done % args.sample_interval == 0:
-            #     save_image(gen_imgs.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
+            if batches_done % args.sample_interval == 0:
+                save_image(gen_imgs.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
 
 
 if __name__ == '__main__':

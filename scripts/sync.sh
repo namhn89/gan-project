@@ -1,0 +1,1 @@
+rsync -a . nhn:motconmeobuon/nhn/gan-project --exclude=['.git'] -i
