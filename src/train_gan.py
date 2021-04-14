@@ -1,9 +1,3 @@
-from six.moves import urllib
-
-opener = urllib.request.build_opener()
-opener.addheaders = [('User-agent', 'Mozilla/5.0')]
-urllib.request.install_opener(opener)
-
 import argparse
 import os
 import numpy as np
@@ -22,13 +16,16 @@ import torch
 from tqdm import tqdm
 
 import config
+import preprocess_data
 
 from models.vanila_gan import Discriminator, Generator
 from utils.general import weights_init
 
-os.makedirs("images", exist_ok=True)
-
 cuda = True if torch.cuda.is_available() else False
+
+
+def get_noise(n_samples, z_dim, device='cpu'):
+    return torch.randn(n_samples, z_dim, device=device)
 
 
 def parse_args():
@@ -42,8 +39,9 @@ def parse_args():
     parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
     parser.add_argument("--img_size", type=int, default=28, help="size of each image dimension")
     parser.add_argument("--channels", type=int, default=1, help="number of image channels")
-    parser.add_argument("--sample_interval", type=int, default=400, help="interval between image samples")
-    parser.add_argument("--path_images", type=str, default="images", help="..")
+    parser.add_argument("--sample_interval", type=int, default=10000, help="interval between image samples")
+    parser.add_argument("--path_images", type=str, default="images_vanilla_gan", help="Saving generated images")
+    parser.add_argument("--gpu", type=str, )
     return parser.parse_args()
 
 
@@ -51,22 +49,13 @@ def main():
     args = parse_args()
     print(args)
 
+    # Save generated images
     os.makedirs(args.path_images, exist_ok=True)
 
     # Configure data loader
-    os.makedirs(config.DATA_MNIST, exist_ok=True)
-    dataloader = torch.utils.data.DataLoader(
-        datasets.MNIST(
-            config.DATA_MNIST,
-            train=True,
-            download=True,
-            transform=transforms.Compose(
-                [transforms.Resize(args.img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
-            ),
-        ),
-        batch_size=args.batch_size,
-        shuffle=True,
-    )
+    dataloader = preprocess_data.generate_dataloader(name_dataset='mnist',
+                                                     img_size=args.img_size,
+                                                     batch_size=args.batch_size)
 
     # Loss functions
     adversarial_loss = torch.nn.BCELoss()
@@ -138,13 +127,13 @@ def main():
             optimizer_D.step()
 
             print(
-                "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+                "[Epoch %d/%d] [Batch %d/%d] [Discriminator loss: %f] [Generator loss: %f]"
                 % (epoch, args.n_epochs, i, len(dataloader), d_loss.item(), g_loss.item())
             )
 
-            batches_done = epoch * len(dataloader) + i
-            if batches_done % args.sample_interval == 0:
-                save_image(gen_imgs.data[:25], "images/%d.png" % batches_done, nrow=5, normalize=True)
+            steps = epoch * len(dataloader) + i
+            if steps % args.sample_interval == 0:
+                save_image(gen_imgs.data[:25], args.path_images + "/%d.png" % steps, nrow=5, normalize=True)
 
 
 if __name__ == '__main__':
