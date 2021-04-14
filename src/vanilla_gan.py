@@ -135,6 +135,8 @@ def main():
     log_string('Creating Tensorboard ...')
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensor_dir = experiment_dir.joinpath('tensorboard/')
+    if tensor_dir.exists():
+        shutil.rmtree(tensor_dir)
     tensor_dir.mkdir(exist_ok=True)
     summary_writer = SummaryWriter(os.path.join(tensor_dir))
 
@@ -187,12 +189,11 @@ def main():
         for i, (images, _) in enumerate(dataloader):
 
             # Adversarial ground truths
-            real_label = 1
-            fake_label = 0
-
-            label = torch.full((images.size(0), 1), real_label, dtype=torch.float, device=device)
+            real_label = 1.
+            fake_label = 0.
 
             # Configure input
+            label = torch.full((images.size(0), 1), real_label, dtype=torch.float, device=device)
             real_images = images.to(device)
 
             ############################
@@ -220,7 +221,7 @@ def main():
             errD_fake = adversarial_loss(output, label)
             errD_fake.backward()
             # Add the gradients from the all-real and all-fake batches
-            errD = (errD_real + errD_fake)
+            errD = (errD_real + errD_fake) / 2
             D_G_z1 = output.mean().item()
             # Update D
             optimizer_D.step()
@@ -228,6 +229,7 @@ def main():
             ############################
             # (2) Update G network: maximize log(D(G(z)))
             ###########################
+
             generator.zero_grad()
             # Since we just updated D, perform another forward pass of all-fake batch through D
             label.fill_(real_label)
@@ -241,17 +243,20 @@ def main():
             optimizer_G.step()
 
             log_string(
-                "[Epoch %d/%d] [Batch %d/%d] [Discriminator Loss: %f] [Generator Loss: %f] [D(x): %f] [D(G(z)): %f / %f]"
-                % (epoch, args.n_epochs, i, len(dataloader), errD.item(), errG.item(),
-                   D_x, D_G_z1, D_G_z2)
+                "[Epoch %d/%d] [Batch %d/%d] "
+                "[Loss_D: %f] [Loss_G: %f] [D(x): %f] [D(G(z)): %f / %f]"
+                % (epoch, args.n_epochs, i, len(dataloader),
+                   errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
             )
 
             D_losses.append(errD.item())
             G_losses.append(errG.item())
 
             steps = epoch * len(dataloader) + i
-            summary_writer.add_scalar('Discriminator Loss', errD.item(), steps)
-            summary_writer.add_scalar('Generator Loss', errG.item(), steps)
+            summary_writer.add_scalar('Generative Adversarial Model',
+                                      { 'Discriminator Loss' : errD.item(),
+                                        'Generator Loss': errG.item()},
+                                        steps)
 
             if steps % args.display_step == 0:
                 with torch.no_grad():
@@ -271,6 +276,16 @@ def main():
                            checkpoints_dir.joinpath(f"{args.log_dir}_G_iter_{steps}.pth"))
                 torch.save(discriminator.state_dict(),
                            checkpoints_dir.joinpath(f"{args.log_dir}_D_iter_{steps}.pth"))
+
+    plt.figure(figsize=(10, 5))
+    plt.title("Generator and Discriminator Loss During Training")
+    plt.plot(G_losses, label="G")
+    plt.plot(D_losses, label="D")
+    plt.xlabel("Iterations")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.show()
+    plt.savefig(experiment_dir.joinpath('graph.png'))
 
 
 if __name__ == '__main__':

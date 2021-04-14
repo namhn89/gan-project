@@ -35,7 +35,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 
 # Set random seed for reproducibility
 manualSeed = 999
-#manualSeed = random.randint(1, 10000) # use if you want new results
+# manualSeed = random.randint(1, 10000) # use if you want new results
 print("Random Seed: ", manualSeed)
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
@@ -145,6 +145,8 @@ def main():
     log_string('Creating Tensorboard ...')
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensor_dir = experiment_dir.joinpath('tensorboard/')
+    if tensor_dir.exists():
+        shutil.rmtree(tensor_dir)
     tensor_dir.mkdir(exist_ok=True)
     summary_writer = SummaryWriter(os.path.join(tensor_dir))
 
@@ -198,7 +200,7 @@ def main():
     generator.apply(weights_init)
     discriminator.apply(weights_init)
 
-    Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
+    # Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
     # ----------
     #  Training
@@ -217,7 +219,7 @@ def main():
             real_label = 1.
             fake_label = 0.
 
-            label = torch.full((images.size(0), ), real_label, dtype=torch.float, device=device)
+            label = torch.full((images.size(0), 1), real_label, dtype=torch.float, device=device)
 
             # Configure input
             real_images = images.to(device)
@@ -226,39 +228,41 @@ def main():
             # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
             ###########################
 
-            ## Train with all-real batch
+            # Train with all-real batch
 
             discriminator.zero_grad()
-            output = discriminator(real_images).view(-1)
+            output = discriminator(real_images)
 
             errD_real = adversarial_loss(output, label)
             errD_real.backward()
             D_x = output.mean().item()
 
-            ## Train with all-fake batch
+            # Train with all-fake batch
             # Generate batch of latent vectors
             noise = torch.randn(images.size(0), args.latent_dim, device=device)
 
             gen_images = generator(noise)
             label.fill_(fake_label)
             # Classify all fake batch with D
-            output = discriminator(gen_images.detach()).view(-1)
+            output = discriminator(gen_images.detach())
             # Calculate D's loss on the all-fake batch
             errD_fake = adversarial_loss(output, label)
+            # Calculate the gradients for this batch
             errD_fake.backward()
             D_G_z1 = output.mean().item()
             # Add the gradients from the all-real and all-fake batches
-            errD = (errD_real + errD_fake) / 2
+            errD = (errD_real + errD_fake) / 2.
             # Update D
             optimizer_D.step()
 
             ############################
             # (2) Update G network: maximize log(D(G(z)))
             ###########################
+
             generator.zero_grad()
+            label.fill_(real_label) # fake labels are real for generator cost
             # Since we just updated D, perform another forward pass of all-fake batch through D
-            label.fill_(real_label)
-            output = discriminator(gen_images).view(-1)
+            output = discriminator(gen_images)
             # Calculate G's loss based on this output
             errG = adversarial_loss(output, label)
             # Calculate gradients for G
@@ -268,22 +272,28 @@ def main():
             optimizer_G.step()
 
             log_string(
-                "[Epoch %d/%d] [Batch %d/%d] [Discriminator Loss: %f] [Generator Loss: %f] [D(x): %f] [D(G(z)): %f / %f]"
-                % (epoch, args.n_epochs, i, len(dataloader), errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
+                "[Epoch %d/%d] [Batch %d/%d] "
+                "[Loss_D: %f] [Loss_G: %f] [D(x): %f] [D(G(z)): %f / %f]"
+                % (epoch, args.n_epochs, i, len(dataloader),
+                   errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
             )
 
             D_losses.append(errD.item())
             G_losses.append(errG.item())
 
             steps = epoch * len(dataloader) + i
-            summary_writer.add_scalar('Discriminator Loss', errD.item(), steps)
-            summary_writer.add_scalar('Generator Loss', errG.item(), steps)
+            steps = epoch * len(dataloader) + i
+            summary_writer.add_scalar('Generative Adversarial Model',
+                                      {'Discriminator Loss': errD.item(),
+                                       'Generator Loss': errG.item()},
+                                      steps)
 
             if steps % args.display_step == 0:
                 with torch.no_grad():
                     fake = generator(fixed_noise)
 
-                    save_image(real_images.data[:25], saved_path.joinpath("real_%d.png" % steps), nrow=5, normalize=True)
+                    save_image(real_images.data[:25], saved_path.joinpath("real_%d.png" % steps), nrow=5,
+                               normalize=True)
                     save_image(fake.data[:25], saved_path.joinpath("fake_%d.png" % steps), nrow=5, normalize=True)
 
                     show_tensor_images(real_images.data[:25], summary_writer, "Real Image", steps)
@@ -299,11 +309,11 @@ def main():
     plt.title("Generator and Discriminator Loss During Training")
     plt.plot(G_losses, label="G")
     plt.plot(D_losses, label="D")
-    plt.xlabel("iterations")
+    plt.xlabel("Iterations")
     plt.ylabel("Loss")
     plt.legend()
     plt.show()
-    plt.savefig(experiment_dir.joinpath('out.png'))
+    plt.savefig(experiment_dir.joinpath('graph.png'))
 
 
 if __name__ == '__main__':
