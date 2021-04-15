@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 class NetG_CIFAR10(nn.Module):
@@ -43,10 +44,11 @@ class NetG_CIFAR10(nn.Module):
 
 
 class NetD_CIFAR10(nn.Module):
-    def __init__(self, image_shape, feature_size=64):
+    def __init__(self, image_shape, feature_size=64, loss_function="mse"):
         super(NetD_CIFAR10, self).__init__()
         self.image_shape = image_shape
         self.feature_size = feature_size
+        self.loss_function = loss_function
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels=self.image_shape[0], out_channels=self.feature_size,
@@ -68,14 +70,17 @@ class NetD_CIFAR10(nn.Module):
         self.conv4 = nn.Sequential(
             nn.Conv2d(in_channels=self.feature_size * 4, out_channels=1,
                       kernel_size=4, stride=1, padding=0, bias=False),
-            nn.Sigmoid()
+            # nn.Sigmoid()
         )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, img):
         out = self.conv1(img)
         out = self.conv2(out)
         out = self.conv3(out)
         out = self.conv4(out)
+        if self.loss_function == "bce":
+            out = self.sigmoid(out)
         return out.view(-1, 1)
 
 
@@ -83,7 +88,7 @@ def test_CIFAR10():
     z = torch.randn(128, 100)
     G = NetG_CIFAR10(latent_dim=100, image_shape=(3, 32, 32), feature_size=64)
     # img = torch.randn(128, 3, 32, 32)
-    D = NetD_CIFAR10(image_shape=(3, 32, 32), feature_size=64)
+    D = NetD_CIFAR10(image_shape=(3, 32, 32), feature_size=64, loss_function="bce")
     print(G(z).shape)
     print(D(G(z)).shape)
 

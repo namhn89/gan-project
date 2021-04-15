@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 class NetG_MNIST(nn.Module):
@@ -45,10 +46,11 @@ class NetG_MNIST(nn.Module):
 
 
 class NetD_MNIST(nn.Module):
-    def __init__(self, image_shape, feature_size):
+    def __init__(self, image_shape, feature_size, loss_function="mse"):
         super(NetD_MNIST, self).__init__()
         self.image_shape = image_shape
         self.feature_size = feature_size
+        self.loss_function = loss_function
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(self.image_shape[0], self.feature_size,
@@ -70,14 +72,17 @@ class NetD_MNIST(nn.Module):
         self.conv4 = nn.Sequential(
             nn.Conv2d(self.feature_size * 4, 1,
                       kernel_size=4, stride=1, padding=0, bias=False),
-            nn.Sigmoid(),
+            # nn.Sigmoid(),
         )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, img):
         out = self.conv1(img)
         out = self.conv2(out)
         out = self.conv3(out)
         out = self.conv4(out)
+        if self.loss_function == "bce":
+            out = self.sigmoid(out)
         return out.view(-1, 1)
 
 
@@ -85,7 +90,7 @@ def test_MNIST():
     z = torch.randn(128, 100)
     G = NetG_MNIST(latent_dim=100, image_shape=(1, 28, 28), feature_size=64)
     # img = torch.randn(128, 1, 28, 28)
-    D = NetD_MNIST(image_shape=(1, 28, 28), feature_size=64)
+    D = NetD_MNIST(image_shape=(1, 28, 28), feature_size=64, loss_function="bce")
     print(G(z).shape)
     print(D(G(z)).shape)
 

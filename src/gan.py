@@ -22,7 +22,10 @@ from tqdm import tqdm
 
 import preprocess_data
 
-from models.vanilla_gan import Discriminator, Generator
+from models.vanilla_gan import NetG, NetD
+from models.dcgan_mnist import NetD_MNIST, NetG_MNIST
+from models.dcgan_cifar10 import NetD_CIFAR10, NetG_CIFAR10
+from models.dcgan_celeba import NetD_CelebA, NetG_CelebA
 from utils.general import weights_init
 
 # Set random seed for reproducibility
@@ -67,34 +70,49 @@ def show_tensor_images(image_tensor, writer, type_image, step, num_images=25, si
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
-    parser.add_argument("--batch_size", type=int, default=128, help="size of the batches")
+    parser.add_argument("--n_epochs", type=int, default=200,
+                        help="number of epochs of training")
+    parser.add_argument("--batch_size", type=int, default=128,
+                        help="size of the batches")
 
-    parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
-    parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
-    parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
-    parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
+    parser.add_argument("--lr", type=float, default=0.0002,
+                        help="adam: learning rate")
+    parser.add_argument("--b1", type=float, default=0.5,
+                        help="adam: decay of first order momentum of gradient")
+    parser.add_argument("--b2", type=float, default=0.999,
+                        help="adam: decay of first order momentum of gradient")
+    parser.add_argument("--n_cpu", type=int, default=8,
+                        help="number of cpu threads to use during batch generation")
+    parser.add_argument("--loss_function", type=str, default="mse",
+                        help="Loss Function", choices=["mse", "bce"])
 
-    parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
-    # parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
-    # parser.add_argument("--channels", type=int, default=3, help="number of image channels")
-    parser.add_argument("--dataset", type=str, default="mnist", choices=["mnist", "celeba", "cifar10"])
-    parser.add_argument("--display_step", type=int, default=10000, help="interval between image samples")
-    parser.add_argument("--gpu", type=str, default='0', help='Specify')
-    parser.add_argument('--log_dir', type=str, default="gan", help='experiment root')
+    parser.add_argument("--latent_dim", type=int, default=100,
+                        help="dimensionality of the latent space")
+    parser.add_argument("--feature_size", type=int, default=64,
+                        help="dimensionality of the feature")
+
+    parser.add_argument("--dataset", type=str, default="mnist",
+                        choices=["mnist", "celeba", "cifar10"])
+    parser.add_argument("--display_step", type=int, default=1000,
+                        help="interval between image samples")
+
+    parser.add_argument("--gpu", type=str, default='0', help='Specify GPU ')
+    parser.add_argument('--log_dir', type=str, default="gan",
+                        help='experiment root', choices=["gan", "dcgan"])
     return parser.parse_args()
 
 
 def main():
-    global img_size, channels
+    global img_size, channels, adversarial_loss
 
     def log_string(string):
         logger.info(string)
         print(string)
 
     args = parse_args()
-    log_model = args.log_dir + "_n_epochs" + str(args.n_epochs)
-    log_model = log_model + "_batch_size" + str(args.batch_size)
+    log_model = args.log_dir + "_n_epochs_" + str(args.n_epochs)
+    log_model = log_model + "_batch_size_" + str(args.batch_size)
+    log_model = log_model + "_loss_" + str(args.loss_function)
     log_model = log_model + "_" + args.dataset
 
     if args.dataset == 'mnist':
@@ -152,17 +170,62 @@ def main():
     os.makedirs(saved_path, exist_ok=True)
 
     # Configure data loader
-    dataloader = preprocess_data.generate_dataloader(name_dataset=args.dataset,
-                                                     img_size=img_size,
-                                                     batch_size=args.batch_size)
+    dataloader = preprocess_data.generate_dataloader(
+        name_dataset=args.dataset,
+        img_size=img_size,
+        batch_size=args.batch_size
+    )
 
     # Loss functions
-    adversarial_loss = torch.nn.BCELoss()
+    if args.loss_function == "bce":
+        adversarial_loss = torch.nn.BCELoss()
+    elif args.loss_function == "mse":
+        adversarial_loss = torch.nn.MSELoss()
 
     # Initialize generator and discriminator
-    generator = Generator(latent_dim=args.latent_dim,
-                          image_shape=(channels, img_size, img_size))
-    discriminator = Discriminator(image_shape=(channels, img_size, img_size))
+    if args.log_dir == "gan":
+        generator = NetG(
+            latent_dim=args.latent_dim,
+            image_shape=(channels, img_size, img_size)
+        )
+        discriminator = NetD(
+            image_shape=(channels, img_size, img_size),
+            loss_function=args.loss_function,
+        )
+    elif args.log_dir == "dcgan":
+        if args.dataset == 'mnist':
+            generator = NetG_MNIST(
+                latent_dim=args.latent_dim,
+                image_shape=(channels, img_size, img_size),
+                feature_size=args.feature_size
+            )
+            discriminator = NetD_MNIST(
+                image_shape=(channels, img_size, img_size),
+                feature_size=args.feature_size,
+                loss_function=args.loss_function
+            )
+        elif args.dataset == 'cifar10':
+            generator = NetG_CIFAR10(
+                latent_dim=args.latent_dim,
+                image_shape=(channels, img_size, img_size),
+                feature_size=args.feature_size
+            )
+            discriminator = NetD_CIFAR10(
+                image_shape=(channels, img_size, img_size),
+                feature_size=args.feature_size,
+                loss_function=args.loss_function
+            )
+        elif args.dataset == 'celeba':
+            generator = NetG_CelebA(
+                latent_dim=args.latent_dim,
+                image_shape=(channels, img_size, img_size),
+                feature_size=args.feature_size
+            )
+            discriminator = NetD_CelebA(
+                image_shape=(channels, img_size, img_size),
+                feature_size=args.feature_size,
+                loss_function=args.loss_function
+            )
 
     # Optimizers
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
@@ -176,8 +239,6 @@ def main():
     # Initialize weights
     generator.apply(weights_init)
     discriminator.apply(weights_init)
-
-    Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
     # ----------
     #  Training
@@ -204,7 +265,7 @@ def main():
             # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
             ###########################
 
-            ## Train with all-real batch
+            # Train with all-real batch
 
             discriminator.zero_grad()
             output = discriminator(real_images)
@@ -213,7 +274,7 @@ def main():
             errD_real.backward()
             D_x = output.mean().item()
 
-            ## Train with all-fake batch
+            # Train with all-fake batch
             # Generate batch of latent vectors
             noise = torch.randn(images.size(0), args.latent_dim, device=device)
 
@@ -246,12 +307,13 @@ def main():
             # Update G
             optimizer_G.step()
 
-            log_string(
-                "[Epoch %d/%d] [Batch %d/%d] "
-                "[Loss_D: %.4f]\t[Loss_G: %.4f]\t[D(x): %.4f]\t[D(G(z)): %.4f / %.4f]"
-                % (epoch, args.n_epochs, i, len(dataloader),
-                   errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
-            )
+            if i % 50 == 0:
+                log_string(
+                    "[Epoch %d/%d] [Batch %d/%d]"
+                    "\t[Loss_D: %.4f]\t[Loss_G: %.4f]\t[D(x): %.4f]\t[D(G(z)): %.4f / %.4f]"
+                    % (epoch, args.n_epochs, i, len(dataloader),
+                       errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
+                )
 
             D_losses.append(errD.item())
             G_losses.append(errG.item())
@@ -268,7 +330,6 @@ def main():
 
             if steps % args.display_step == 0:
                 with torch.no_grad():
-                    # save_image(gen_imgs.data[:25], args.path_images + "/%d.png" % steps, nrow=5, normalize=True)
                     fake = generator(fixed_noise)
 
                     save_image(real_images.data[:25], saved_path.joinpath("real_%d.png" % steps),
@@ -279,12 +340,14 @@ def main():
                     show_tensor_images(fake, summary_writer, "Fake Image", steps)
                     show_tensor_images(real_images, summary_writer, "Real Image", steps)
 
-                # do checkpointing
+            # do checkpointing
+            if steps % 10000 == 0 or steps == 50000:
                 torch.save(generator.state_dict(),
                            checkpoints_dir.joinpath(f"{args.log_dir}_G_iter_{steps}.pth"))
                 torch.save(discriminator.state_dict(),
                            checkpoints_dir.joinpath(f"{args.log_dir}_D_iter_{steps}.pth"))
 
+    # Plot loss graph
     plt.figure(figsize=(10, 5))
     plt.title("Generator and Discriminator Loss During Training")
     plt.plot(G_losses, label="Generator")
@@ -294,6 +357,7 @@ def main():
     plt.legend()
     plt.show()
     plt.savefig(experiment_dir.joinpath('graph.png'))
+    summary_writer.add_figure("Figure of Loss", plt.gcf())
 
 
 if __name__ == '__main__':

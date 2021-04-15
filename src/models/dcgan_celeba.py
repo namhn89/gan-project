@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 class NetG_CelebA(nn.Module):
@@ -50,10 +51,11 @@ class NetG_CelebA(nn.Module):
 
 
 class NetD_CelebA(nn.Module):
-    def __init__(self, image_shape, feature_size=64):
+    def __init__(self, image_shape, feature_size=64, loss_function="mse"):
         super(NetD_CelebA, self).__init__()
         self.image_shape = image_shape
         self.feature_size = feature_size
+        self.loss_function = loss_function
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels=self.image_shape[0], out_channels=self.feature_size,
@@ -82,8 +84,9 @@ class NetD_CelebA(nn.Module):
         self.conv5 = nn.Sequential(
             nn.Conv2d(in_channels=self.feature_size * 8, out_channels=1,
                       kernel_size=4, stride=1, padding=0, bias=False),
-            nn.Sigmoid()
+            # nn.Sigmoid()
         )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, img):
         out = self.conv1(img)
@@ -91,6 +94,8 @@ class NetD_CelebA(nn.Module):
         out = self.conv3(out)
         out = self.conv4(out)
         out = self.conv5(out)
+        if self.loss_function == "bce":
+            out = self.sigmoid(out)
         return out.view(-1, 1)
 
 
@@ -98,7 +103,7 @@ def test_CelebA():
     z = torch.randn(128, 100)
     G = NetG_CelebA(latent_dim=100, image_shape=(3, 64, 64), feature_size=128)
     # img = torch.randn(128, 3, 64, 64)
-    D = NetD_CelebA(image_shape=(3, 64, 64), feature_size=128)
+    D = NetD_CelebA(image_shape=(3, 64, 64), feature_size=128, loss_function="bce")
     print(G(z).shape)
     print(D(G(z)).shape)
 
