@@ -6,19 +6,13 @@ import logging
 from pathlib import Path
 import shutil
 import random
-
 import matplotlib.pyplot as plt
 
-from torch.autograd import Variable
+import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from torchvision.utils import save_image
 from torchvision.utils import make_grid
-
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
-from tqdm import tqdm
 
 import preprocess_data
 
@@ -39,7 +33,7 @@ cuda = True if torch.cuda.is_available() else False
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
-def get_noise(n_samples, z_dim, device='cpu'):
+def get_noise(n_samples, z_dim):
     return torch.randn(n_samples, z_dim, device=device)
 
 
@@ -54,7 +48,7 @@ def matplotlib_imshow(img, one_channel=False):
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
 
 
-def show_tensor_images(image_tensor, writer, type_image, step, num_images=25, size=(1, 28, 28)):
+def show_tensor_images(image_tensor, writer, type_image, step, num_images=25):
     """
     Function for visualizing images: Given a tensor of images, number of images, and
     size per image, plots and prints the images in an uniform grid.
@@ -95,6 +89,8 @@ def parse_args():
                         choices=["mnist", "celeba", "cifar10"])
     parser.add_argument("--display_step", type=int, default=1000,
                         help="interval between image samples")
+    parser.add_argument("--save_checkpoint_step", type=int, default=10000,
+                        help="Saving checkpoint after step")
 
     parser.add_argument("--gpu", type=str, default='0', help='Specify GPU ')
     parser.add_argument('--log_dir', type=str, default="gan",
@@ -103,7 +99,7 @@ def parse_args():
 
 
 def main():
-    global img_size, channels, adversarial_loss
+    global img_size, channels, adversarial_loss, generator, discriminator
 
     def log_string(string):
         logger.info(string)
@@ -113,6 +109,7 @@ def main():
     log_model = args.log_dir + "_n_epochs_" + str(args.n_epochs)
     log_model = log_model + "_batch_size_" + str(args.batch_size)
     log_model = log_model + "_loss_" + str(args.loss_function)
+    log_model = log_model + "_display_step_" + str(args.display_step)
     log_model = log_model + "_" + args.dataset
 
     if args.dataset == 'mnist':
@@ -231,10 +228,10 @@ def main():
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
 
-    if cuda:
-        generator.cuda()
-        discriminator.cuda()
-        adversarial_loss.cuda()
+    # Assign device for model, criterion
+    generator.to(device)
+    discriminator.to(device)
+    adversarial_loss.to(device)
 
     # Initialize weights
     generator.apply(weights_init)
@@ -320,13 +317,16 @@ def main():
 
             steps = epoch * len(dataloader) + i
             summary_writer.add_scalars(
-                'Generative Adversarial Model',
+                'Loss',
                 {
-                    'Discriminator Loss': errD.item(),
-                    'Generator Loss': errG.item()
+                    'D': errD.item(),
+                    'G': errG.item()
                 },
                 steps
             )
+            summary_writer.add_scalar('D(x)', D_x, steps)
+            summary_writer.add_scalar('D(G(z1))', D_G_z1, steps)
+            summary_writer.add_scalar('D(G(z2))', D_G_z2, steps)
 
             if steps % args.display_step == 0:
                 with torch.no_grad():
@@ -341,13 +341,13 @@ def main():
                     show_tensor_images(real_images, summary_writer, "Real Image", steps)
 
             # do checkpointing
-            if steps % 10000 == 0 or steps == 50000:
+            if steps % args.save_checkpoint_step == 0:
                 torch.save(generator.state_dict(),
                            checkpoints_dir.joinpath(f"{args.log_dir}_G_iter_{steps}.pth"))
                 torch.save(discriminator.state_dict(),
                            checkpoints_dir.joinpath(f"{args.log_dir}_D_iter_{steps}.pth"))
 
-    # Plot loss graph
+    # Plot lossy graph
     plt.figure(figsize=(10, 5))
     plt.title("Generator and Discriminator Loss During Training")
     plt.plot(G_losses, label="Generator")
@@ -357,7 +357,8 @@ def main():
     plt.legend()
     plt.show()
     plt.savefig(experiment_dir.joinpath('graph.png'))
-    summary_writer.add_figure("Figure of Loss", plt.gcf())
+    summary_writer.add_figure("Graph Loss", plt.gcf())
+    summary_writer.close()
 
 
 if __name__ == '__main__':

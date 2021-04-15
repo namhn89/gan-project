@@ -1,1 +1,1 @@
-scp -r nhn:motconmeobuon/nhn/gan-project/src/log/log_vanilla_gan_mnist/images .
+scp -r nhn:motconmeobuon/nhn/gan-project/src/log/dcgan_n_epochs_10_batch_size_128_loss_mse_display_step_100_mnist/images .

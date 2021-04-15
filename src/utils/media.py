@@ -6,14 +6,10 @@ import natsort
 import re
 
 
-def make_gif(folder, file_path='./result.gif'):
-    """
-    :param file_path:
-    :param folder:
-    :return:
-    """
+def make_gif(folder, pattern="fake_*.png", file_path='result.gif'):
     images = []
-    for filename in sorted(glob.glob(folder + "/*.png"), key=lambda x:[int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)]):
+    for filename in sorted(glob.glob(folder + pattern),
+                           key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)]):
         images.append(imageio.imread(filename))
     imageio.mimsave(file_path, images)
 
@@ -83,5 +79,3 @@ def load_image(image_path, color_space="rgb"):
 
     return image
 
-
-make_gif('/home/nam/images')
