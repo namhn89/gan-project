@@ -35,14 +35,16 @@ def generate_dataloader(name_dataset, img_size, batch_size):
                 train=True,
                 download=False,
                 transform=transforms.Compose(
-                    [transforms.Resize(img_size),
-                     transforms.ToTensor(),
-                     transforms.Normalize([0.5], [0.5])
-                     ]
+                    [
+                        transforms.Resize(img_size),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0.5], [0.5])
+                    ]
                 ),
             ),
             batch_size=batch_size,
             shuffle=True,
+            num_workers=8,
         )
         return dataloader_mnist
 
@@ -56,29 +58,38 @@ def generate_dataloader(name_dataset, img_size, batch_size):
                 train=True,
                 download=False,
                 transform=transforms.Compose(
-                    [transforms.Resize((img_size, img_size)),
-                     transforms.ToTensor(),
-                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                     ]
+                    [
+                        transforms.Resize((img_size, img_size)),
+                        transforms.ToTensor(),
+                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                    ]
                 ),
             ),
             batch_size=batch_size,
             shuffle=True,
+            num_workers=8,
         )
         return dataloader_cifar10
     elif name_dataset == 'celeba':
 
         # CELEBA
         # Image size: (3, 64, 64)
-        dataset = torchvision.datasets.ImageFolder(root=config.DATA_CELEBA,
-                                                   transform=transforms.Compose([
-                                                       transforms.Resize(img_size),
-                                                       transforms.CenterCrop(img_size),
-                                                       transforms.ToTensor(),
-                                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                                                   ]))
+        dataset = torchvision.datasets.ImageFolder(
+            root=config.DATA_CELEBA,
+            transform=transforms.Compose(
+                [
+                    transforms.Resize(img_size),
+                    transforms.CenterCrop(img_size),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                ]
+            )
+        )
         # Create the dataloader
-        dataloader_celeba = torch.utils.data.DataLoader(dataset,
-                                                        batch_size=batch_size,
-                                                        shuffle=True)
+        dataloader_celeba = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=8
+        )
         return dataloader_celeba

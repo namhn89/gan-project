@@ -1,16 +1,14 @@
 import argparse
 import os
 import numpy as np
-import math
 import datetime
 import logging
 from pathlib import Path
 import shutil
-from distutils.dir_util import copy_tree
+import random
 
 import matplotlib.pyplot as plt
 
-from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from torch.utils.tensorboard import SummaryWriter
 
@@ -27,6 +25,12 @@ import preprocess_data
 from models.vanilla_gan import Discriminator, Generator
 from utils.general import weights_init
 
+# Set random seed for reproducibility
+manualSeed = 999
+# manualSeed = random.randint(1, 10000) # use if you want new results
+print("Random Seed: ", manualSeed)
+random.seed(manualSeed)
+torch.manual_seed(manualSeed)
 
 cuda = True if torch.cuda.is_available() else False
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -244,7 +248,7 @@ def main():
 
             log_string(
                 "[Epoch %d/%d] [Batch %d/%d] "
-                "[Loss_D: %f] [Loss_G: %f] [D(x): %f] [D(G(z)): %f / %f]"
+                "[Loss_D: %.4f]\t[Loss_G: %.4f]\t[D(x): %.4f]\t[D(G(z)): %.4f / %.4f]"
                 % (epoch, args.n_epochs, i, len(dataloader),
                    errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
             )
@@ -253,10 +257,14 @@ def main():
             G_losses.append(errG.item())
 
             steps = epoch * len(dataloader) + i
-            summary_writer.add_scalar('Generative Adversarial Model',
-                                      { 'Discriminator Loss' : errD.item(),
-                                        'Generator Loss': errG.item()},
-                                        steps)
+            summary_writer.add_scalars(
+                'Generative Adversarial Model',
+                {
+                    'Discriminator Loss': errD.item(),
+                    'Generator Loss': errG.item()
+                },
+                steps
+            )
 
             if steps % args.display_step == 0:
                 with torch.no_grad():
@@ -279,8 +287,8 @@ def main():
 
     plt.figure(figsize=(10, 5))
     plt.title("Generator and Discriminator Loss During Training")
-    plt.plot(G_losses, label="G")
-    plt.plot(D_losses, label="D")
+    plt.plot(G_losses, label="Generator")
+    plt.plot(D_losses, label="Discriminator")
     plt.xlabel("Iterations")
     plt.ylabel("Loss")
     plt.legend()

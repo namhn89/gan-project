@@ -3,7 +3,7 @@ from torch import nn
 
 
 class NetG_MNIST(nn.Module):
-    def __init__(self, latent_dim, image_shape, feature_size):
+    def __init__(self, latent_dim, image_shape, feature_size=64):
         super(NetG_MNIST, self).__init__()
         self.latent_dim = latent_dim
         self.image_shape = image_shape
@@ -83,9 +83,9 @@ class NetD_MNIST(nn.Module):
 
 def test_MNIST():
     z = torch.randn(128, 100)
-    G = NetG_MNIST(latent_dim=100, image_shape=(1, 28, 28), feature_size=128)
+    G = NetG_MNIST(latent_dim=100, image_shape=(1, 28, 28), feature_size=64)
     # img = torch.randn(128, 1, 28, 28)
-    D = NetD_MNIST(image_shape=(1, 28, 28), feature_size=128)
+    D = NetD_MNIST(image_shape=(1, 28, 28), feature_size=64)
     print(G(z).shape)
     print(D(G(z)).shape)
 

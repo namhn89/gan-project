@@ -1,8 +1,9 @@
 import torch
 from torch import nn
 
+
 class NetG_CIFAR10(nn.Module):
-    def __init__(self, latent_dim, image_shape, feature_size):
+    def __init__(self, latent_dim, image_shape, feature_size=64):
         super(NetG_CIFAR10, self).__init__()
         self.latent_dim = latent_dim
         self.image_shape = image_shape
@@ -42,7 +43,7 @@ class NetG_CIFAR10(nn.Module):
 
 
 class NetD_CIFAR10(nn.Module):
-    def __init__(self, image_shape, feature_size):
+    def __init__(self, image_shape, feature_size=64):
         super(NetD_CIFAR10, self).__init__()
         self.image_shape = image_shape
         self.feature_size = feature_size
@@ -80,9 +81,9 @@ class NetD_CIFAR10(nn.Module):
 
 def test_CIFAR10():
     z = torch.randn(128, 100)
-    G = NetG_CIFAR10(latent_dim=100, image_shape=(3, 32, 32), feature_size=128)
+    G = NetG_CIFAR10(latent_dim=100, image_shape=(3, 32, 32), feature_size=64)
     # img = torch.randn(128, 3, 32, 32)
-    D = NetD_CIFAR10(image_shape=(3, 32, 32), feature_size=128)
+    D = NetD_CIFAR10(image_shape=(3, 32, 32), feature_size=64)
     print(G(z).shape)
     print(D(G(z)).shape)
 

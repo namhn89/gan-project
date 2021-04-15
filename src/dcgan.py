@@ -1,17 +1,14 @@
 import argparse
 import os
 import numpy as np
-import math
 import datetime
 import logging
 from pathlib import Path
 import shutil
 import random
-from distutils.dir_util import copy_tree
 
 import matplotlib.pyplot as plt
 
-from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from torch.utils.tensorboard import SummaryWriter
 
@@ -78,9 +75,10 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
-    parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
+    parser.add_argument("--n_cpu", type=int, default=2, help="number of cpu threads to use during batch generation")
 
     parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
+    parser.add_argument("--feature_size", type=int, default=64, help="dimensionality of the feature")
     # parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
     # parser.add_argument("--channels", type=int, default=3, help="number of image channels")
     parser.add_argument("--dataset", type=str, default="mnist", choices=["mnist", "celeba", "cifar10"])
@@ -171,21 +169,21 @@ def main():
     if args.dataset == 'mnist':
         generator = NetG_MNIST(latent_dim=args.latent_dim,
                                image_shape=(channels, img_size, img_size),
-                               feature_size=128)
+                               feature_size=args.feature_size)
         discriminator = NetD_MNIST(image_shape=(channels, img_size, img_size),
-                                   feature_size=128)
+                                   feature_size=args.feature_size)
     elif args.dataset == 'cifar10':
         generator = NetG_CIFAR10(latent_dim=args.latent_dim,
                                  image_shape=(channels, img_size, img_size),
-                                 feature_size=128)
+                                 feature_size=args.feature_size)
         discriminator = NetD_CIFAR10(image_shape=(channels, img_size, img_size),
-                                     feature_size=128)
+                                     feature_size=args.feature_size)
     elif args.dataset == 'celeba':
         generator = NetG_CelebA(latent_dim=args.latent_dim,
                                 image_shape=(channels, img_size, img_size),
-                                feature_size=128)
+                                feature_size=args.feature_size)
         discriminator = NetD_CelebA(image_shape=(channels, img_size, img_size),
-                                    feature_size=128)
+                                    feature_size=args.feature_size)
 
     # Optimizers
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
@@ -260,7 +258,7 @@ def main():
             ###########################
 
             generator.zero_grad()
-            label.fill_(real_label) # fake labels are real for generator cost
+            label.fill_(real_label)  # fake labels are real for generator cost
             # Since we just updated D, perform another forward pass of all-fake batch through D
             output = discriminator(gen_images)
             # Calculate G's loss based on this output
@@ -273,7 +271,7 @@ def main():
 
             log_string(
                 "[Epoch %d/%d] [Batch %d/%d] "
-                "[Loss_D: %f] [Loss_G: %f] [D(x): %f] [D(G(z)): %f / %f]"
+                "[Loss_D: %.4f]\t[Loss_G: %.4f]\t[D(x): %.4f]\t[D(G(z)): %.4f / %.4f]"
                 % (epoch, args.n_epochs, i, len(dataloader),
                    errD.item(), errG.item(), D_x, D_G_z1, D_G_z2)
             )
@@ -282,11 +280,15 @@ def main():
             G_losses.append(errG.item())
 
             steps = epoch * len(dataloader) + i
-            steps = epoch * len(dataloader) + i
-            summary_writer.add_scalar('Generative Adversarial Model',
-                                      {'Discriminator Loss': errD.item(),
-                                       'Generator Loss': errG.item()},
-                                      steps)
+
+            summary_writer.add_scalars(
+                'Generative Adversarial Model',
+                {
+                    'Discriminator Loss': errD.item(),
+                    'Generator Loss': errG.item()
+                },
+                steps
+            )
 
             if steps % args.display_step == 0:
                 with torch.no_grad():
@@ -307,8 +309,8 @@ def main():
 
     plt.figure(figsize=(10, 5))
     plt.title("Generator and Discriminator Loss During Training")
-    plt.plot(G_losses, label="G")
-    plt.plot(D_losses, label="D")
+    plt.plot(G_losses, label="Generator")
+    plt.plot(D_losses, label="Discriminator")
     plt.xlabel("Iterations")
     plt.ylabel("Loss")
     plt.legend()

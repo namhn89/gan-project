@@ -3,7 +3,7 @@ from torch import nn
 
 
 class NetG_CelebA(nn.Module):
-    def __init__(self, latent_dim, image_shape, feature_size):
+    def __init__(self, latent_dim, image_shape, feature_size=64):
         super(NetG_CelebA, self).__init__()
         self.latent_dim = latent_dim
         self.image_shape = image_shape
@@ -50,7 +50,7 @@ class NetG_CelebA(nn.Module):
 
 
 class NetD_CelebA(nn.Module):
-    def __init__(self, image_shape, feature_size):
+    def __init__(self, image_shape, feature_size=64):
         super(NetD_CelebA, self).__init__()
         self.image_shape = image_shape
         self.feature_size = feature_size
