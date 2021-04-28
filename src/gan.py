@@ -21,6 +21,7 @@ from models.dcgan_mnist import NetD_MNIST, NetG_MNIST
 from models.dcgan_cifar10 import NetD_CIFAR10, NetG_CIFAR10
 from models.dcgan_celeba import NetD_CelebA, NetG_CelebA
 from utils.general import weights_init
+from utils.media import make_gif
 
 # Set random seed for reproducibility
 manualSeed = 999
@@ -30,7 +31,7 @@ random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
 cuda = True if torch.cuda.is_available() else False
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cuda:1') if torch.cuda.is_available() else torch.device('cpu')
 
 
 def get_noise(n_samples, z_dim):
@@ -41,11 +42,11 @@ def matplotlib_imshow(img, one_channel=False):
     if one_channel:
         img = img.mean(dim=0)
     img = img / 2 + 0.5  # unnormalize
-    npimg = img.numpy()
+    np_img = img.numpy()
     if one_channel:
-        plt.imshow(npimg, cmap="Greys")
+        plt.imshow(np_img, cmap="Greys")
     else:
-        plt.imshow(np.transpose(npimg, (1, 2, 0)))
+        plt.imshow(np.transpose(np_img, (1, 2, 0)))
 
 
 def show_tensor_images(image_tensor, writer, type_image, step, num_images=25):
@@ -54,8 +55,8 @@ def show_tensor_images(image_tensor, writer, type_image, step, num_images=25):
     size per image, plots and prints the images in an uniform grid.
     """
     image_tensor = (image_tensor + 1) / 2
-    image_unflat = image_tensor.detach().cpu()
-    image_grid = make_grid(image_unflat[:num_images], nrow=5, normalize=True)
+    image_unflatt = image_tensor.detach().cpu()
+    image_grid = make_grid(image_unflatt[:num_images], nrow=5, normalize=True)
     # show images
     # matplotlib_imshow(image_grid, one_channel=True)
     # add tensorboard
@@ -89,7 +90,7 @@ def parse_args():
                         choices=["mnist", "celeba", "cifar10"])
     parser.add_argument("--display_step", type=int, default=1000,
                         help="interval between image samples")
-    parser.add_argument("--save_checkpoint_step", type=int, default=10000,
+    parser.add_argument("--save_checkpoint_step", type=int, default=50000,
                         help="Saving checkpoint after step")
 
     parser.add_argument("--gpu", type=str, default='0', help='Specify GPU ')
@@ -152,7 +153,7 @@ def main():
 
     '''TENSORBROAD'''
     log_string('Creating Tensorboard ...')
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    # current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensor_dir = experiment_dir.joinpath('tensorboard/')
     if tensor_dir.exists():
         shutil.rmtree(tensor_dir)
@@ -247,6 +248,10 @@ def main():
 
     fixed_noise = torch.randn(args.batch_size, args.latent_dim, device=device)
 
+    wrapper = torch.nn.Sequential(generator, discriminator)
+
+    summary_writer.add_graph(wrapper, input_to_model=torch.randn(1, args.latent_dim).to(device))
+
     for epoch in range(args.n_epochs):
         for i, (images, _) in enumerate(dataloader):
 
@@ -284,6 +289,7 @@ def main():
             errD_fake.backward()
             # Add the gradients from the all-real and all-fake batches
             errD = (errD_real + errD_fake) / 2
+            D_G_z1_tensor = output
             D_G_z1 = output.mean().item()
             # Update D
             optimizer_D.step()
@@ -300,6 +306,7 @@ def main():
             errG = adversarial_loss(output, label)
             # Calculate gradients for G
             errG.backward()
+            D_G_z2_tensor = output
             D_G_z2 = output.mean().item()
             # Update G
             optimizer_G.step()
@@ -332,9 +339,9 @@ def main():
                 with torch.no_grad():
                     fake = generator(fixed_noise)
 
-                    save_image(real_images.data[:25], saved_path.joinpath("real_%d.png" % steps),
-                               nrow=5, normalize=True)
-                    save_image(fake.data[:25], saved_path.joinpath("fake_%d.png" % steps),
+                    # save_image(real_images.data[:25], saved_path.joinpath("real_%d.png" % steps),
+                    #            nrow=5, normalize=True)
+                    save_image(fake.data[:25], saved_path.joinpath("%d.png" % steps),
                                nrow=5, normalize=True)
 
                     show_tensor_images(fake, summary_writer, "Fake Image", steps)
@@ -347,6 +354,13 @@ def main():
                 torch.save(discriminator.state_dict(),
                            checkpoints_dir.joinpath(f"{args.log_dir}_D_iter_{steps}.pth"))
 
+    # Save final checkpoint
+    log_string('Saving checkpoint .......... ')
+    torch.save(generator.state_dict(),
+               checkpoints_dir.joinpath(f"{args.log_dir}_G_final.pth"))
+    torch.save(discriminator.state_dict(),
+               checkpoints_dir.joinpath(f"{args.log_dir}_D_final.pth"))
+
     # Plot lossy graph
     plt.figure(figsize=(10, 5))
     plt.title("Generator and Discriminator Loss During Training")
@@ -358,6 +372,11 @@ def main():
     plt.show()
     plt.savefig(experiment_dir.joinpath('graph.png'))
     summary_writer.add_figure("Graph Loss", plt.gcf())
+
+    # Compress many images to gif file
+    log_string('Saving gif file .......... ')
+    make_gif(saved_path, file_path=experiment_dir.joinpath('out.gif'))
+    log_string('Finishing training phase ...............')
     summary_writer.close()
 
 

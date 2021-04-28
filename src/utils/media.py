@@ -4,14 +4,31 @@ import glob
 import os
 import natsort
 import re
+import PIL
 
 
-def make_gif(folder, pattern="fake_*.png", file_path='result.gif'):
+def make_gif(folder, pattern="*.png", file_path='./out.gif'):
     images = []
-    for filename in sorted(glob.glob(folder + pattern),
+    for filename in sorted(glob.glob(os.path.join(folder, pattern)),
                            key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)]):
+        # print(filename)
         images.append(imageio.imread(filename))
     imageio.mimsave(file_path, images)
+
+
+def display_image(epoch_no):
+    return PIL.Image.open('image_at_epoch_{:04d}.png'.format(epoch_no))
+
+
+def create_dif(folder, pattern, output_path="out.gif"):
+    with imageio.get_writer(output_path, mode="I") as writer:
+        filenames = glob.glob(folder + pattern)
+        filenames = sorted(filenames, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+        for filename in filenames:
+            image = imageio.imread(filename)
+            writer.append_data(image)
+        image = imageio.imread(filename)
+        writer.append_data(image)
 
 
 def getFrame(video_capture, sec, count, save_dir):
@@ -78,4 +95,3 @@ def load_image(image_path, color_space="rgb"):
         raise NotImplementedError
 
     return image
-
