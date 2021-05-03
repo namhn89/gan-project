@@ -8,6 +8,8 @@ import shutil
 import random
 import matplotlib.pyplot as plt
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
@@ -31,7 +33,7 @@ random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
 cuda = True if torch.cuda.is_available() else False
-device = torch.device('cuda:1') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
 def get_noise(n_samples, z_dim):
@@ -161,6 +163,7 @@ def main():
     summary_writer = SummaryWriter(os.path.join(tensor_dir))
 
     # GPU Indicator
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     # Save generated images
