@@ -33,7 +33,7 @@ def main():
     )
 
     loss_function = st.sidebar.selectbox(
-        "Please a choose loss function",
+        "Please choose a loss function",
         ["bce", "mse"]
     )
 
